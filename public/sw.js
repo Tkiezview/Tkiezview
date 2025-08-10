@@ -1,10 +1,9 @@
-// TkiezView SW v2 — network-first pour les pages, cache-first pour les assets
-const CACHE_NAME = 'tkiezview-v2';
+// TkiezView SW v3 — network-first pour les pages, cache-first pour les assets
+const CACHE_NAME = 'tkiezview-v3';
 const ASSET_CACHE = [
   '/manifest.webmanifest'
 ];
 
-// Utilitaire: est-ce une navigation (HTML) ?
 function isNavigationRequest(request) {
   return request.mode === 'navigate' ||
     (request.headers.get('accept') || '').includes('text/html');
@@ -26,23 +25,20 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
-// Pages: network-first ; Assets GET: cache-first
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
-  // 1) Pages HTML → network-first pour voir les mises à jour
+  // 1) Pages HTML → network-first
   if (isNavigationRequest(req)) {
     event.respondWith((async () => {
       try {
         const fresh = await fetch(req);
-        // Optionnel: on peut mettre en cache la dernière page visitée
         const cache = await caches.open(CACHE_NAME);
         cache.put(req, fresh.clone());
         return fresh;
       } catch (err) {
         const cached = await caches.match(req);
         if (cached) return cached;
-        // Dernier recours: page d’accueil en cache s’il y en a une
         return caches.match('/');
       }
     })());
