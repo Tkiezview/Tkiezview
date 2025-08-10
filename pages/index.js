@@ -5,7 +5,7 @@ const fmt = (n, c = "EUR", l = "fr-FR") =>
   new Intl.NumberFormat(l, { style: "currency", currency: c }).format(n);
 const cn = (...x) => x.filter(Boolean).join(" ");
 const days = [
-  { key: "mon", label: "Lun" },
+  { key: "mon", label: "Lundi" },
   { key: "tue", label: "Mar" },
   { key: "wed", label: "Mer" },
   { key: "thu", label: "Jeu" },
