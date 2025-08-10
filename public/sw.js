@@ -1,5 +1,5 @@
-// TkiezView SW v3 — network-first pour les pages, cache-first pour les assets
-const CACHE_NAME = 'tkiezview-v3';
+// TkiezView SW v4 — network-first pour les pages, cache-first pour les assets
+const CACHE_NAME = 'tkiezview-v4';
 const ASSET_CACHE = [
   '/manifest.webmanifest'
 ];
@@ -28,7 +28,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
-  // 1) Pages HTML → network-first
+  // 1) Pages HTML → network-first (pour voir les maj tout de suite)
   if (isNavigationRequest(req)) {
     event.respondWith((async () => {
       try {
