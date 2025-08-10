@@ -1,5 +1,3 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: { optimizeCss: true }
-};
+const nextConfig = {};
 export default nextConfig;
