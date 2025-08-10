@@ -1,82 +1,90 @@
 import { useMemo, useState, useEffect } from "react";
 
-/* ========= helpers ========= */
+/** ============ utils & storage ============ */
 const fmt = (n, c = "EUR", l = "fr-FR") =>
   new Intl.NumberFormat(l, { style: "currency", currency: c }).format(n);
 const cn = (...x) => x.filter(Boolean).join(" ");
-const days = [
-  { key: "mon", label: "Lun" },
-  { key: "tue", label: "Mar" },
-  { key: "wed", label: "Mer" },
-  { key: "thu", label: "Jeu" },
-  { key: "fri", label: "Ven" },
-  { key: "sat", label: "Sam" },
-  { key: "sun", label: "Dim" },
-];
+const today = new Date();
+const toKey = (d) => d.toISOString().slice(0, 10);
+const pad = (n) => (n < 10 ? "0" + n : "" + n);
+const dmy = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${(d.getFullYear() + "").slice(2)}`;
+const dayName = (d) =>
+  ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"][d.getDay()];
+function startOfWeekMonday(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 dim ... 6 sam
+  const diff = (day === 0 ? -6 : 1) - day; // lundi comme début
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function getWeek(date = new Date()) {
+  const start = startOfWeekMonday(date);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+// simple localStorage helpers
+const LS = {
+  read(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  write(key, val) {
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+    } catch {}
+  },
+};
+
+/** ============ couleurs & collaborateurs ============ */
+const theme = {
+  pro: { base: "#2563eb", light: "#dbeafe", dark: "#1e3a8a" }, // bleu
+  perso: { base: "#8b5cf6", light: "#ede9fe", dark: "#5b21b6" }, // violet
+};
 const collaborators = [
   { id: "you", name: "Toi", color: "#0ea5e9" },
   { id: "co", name: "Collaborateur", color: "#8b5cf6" },
 ];
 
-/* ========= données factices ========= */
-const sampleTasks = {
-  Pro: [
-    { id: 1, title: "Refonte page d’accueil", status: "todo", day: "tue", assignee: "you", priority: 2 },
-    { id: 2, title: "Rdv client Alpha (11h)", status: "upcoming", day: "thu", assignee: "you", priority: 1 },
-    { id: 3, title: "Brief au collaborateur", status: "todo", day: "mon", assignee: "co", priority: 2 },
-    { id: 4, title: "Facturation juillet", status: "done", day: "mon", assignee: "you", priority: 3 },
-  ],
-  Perso: [
-    { id: 11, title: "Courses", status: "todo", day: "sat", assignee: "you", priority: 3 },
-    { id: 12, title: "RDV Médecin (15h)", status: "upcoming", day: "wed", assignee: "you", priority: 1 },
-    { id: 13, title: "Anniversaire à préparer", status: "todo", day: "fri", assignee: "co", priority: 2 },
-  ],
-};
-
-const sampleFree = [
-  { id: 101, title: "Idée article — productivité" },
-  { id: 102, title: "Vérifier hébergement alternatif" },
-  { id: 103, title: "Acheter cartouches imprimante" },
+/** ============ données initiales (une seule fois si LS vide) ============ */
+const seedTasksPro = [
+  { id: 1, title: "Refonte page d’accueil", status: "todo", dayKey: toKey(new Date()), assignee: "you", priority: 2 },
+  { id: 2, title: "Rdv client Alpha (11h)", status: "upcoming", dayKey: toKey(new Date()), assignee: "you", priority: 1 },
 ];
-
-const tradingObjectives = {
-  court: [
-    { id: "o1", title: "Challenge Prop Firm X validé", progress: 0.8 },
-    { id: "o2", title: "Respect du plan 10 jours", progress: 1 },
-    { id: "o3", title: "+3% sur 1 semaine", progress: 0.6 },
-  ],
-  moyen: [
-    { id: "o4", title: "3 challenges validés", progress: 0.33 },
-    { id: "o5", title: "Capital propre 5 000 €", progress: 0.5 },
-    { id: "o6", title: "3 mois consécutifs verts", progress: 0.33 },
-  ],
-  long: [
-    { id: "o7", title: "Capital propre 50 000 €", progress: 0.1 },
-    { id: "o8", title: "Payout total 100 000 $", progress: 0.05 },
-    { id: "o9", title: "Vivre 100% du trading", progress: 0.02 },
-  ],
-};
-
-const sampleJournal = [
+const seedTasksPerso = [
+  { id: 11, title: "Courses", status: "todo", dayKey: toKey(new Date()), assignee: "you", priority: 3 },
+  { id: 12, title: "RDV Médecin (15h)", status: "upcoming", dayKey: toKey(new Date()), assignee: "you", priority: 1 },
+];
+const seedFree = [
+  { id: 101, title: "Idée article — productivité" },
+  { id: 102, title: "Acheter cartouches imprimante" },
+];
+const seedJournal = [
   { id: "t1", date: "2025-08-01", asset: "NAS100", dir: "Long", entry: 18500, sl: 18460, tp: 18580, rrPlanned: 2, rrReal: 1.5, result: 150, setupRespected: true, comment: "Entrée sur FVG 5m après MSS.", proof: null },
   { id: "t2", date: "2025-08-02", asset: "DE40",  dir: "Short", entry: 18150, sl: 18190, tp: 18090, rrPlanned: 2, rrReal: -1,  result: -100, setupRespected: false, comment: "FOMO, hors plan.", proof: null },
-  { id: "t3", date: "2025-08-03", asset: "NAS100", dir: "Short", entry: 18620, sl: 18660, tp: 18520, rrPlanned: 2, rrReal: 2.1, result: 210, setupRespected: true, comment: "Rejet zone 09:00-09:30.", proof: null },
-  { id: "t4", date: "2025-08-04", asset: "DE40",  dir: "Long", entry: 18210, sl: 18180, tp: 18280, rrPlanned: 2, rrReal: 0,   result: 0,   setupRespected: true, comment: "BE après retour.", proof: null },
-  { id: "t5", date: "2025-08-05", asset: "NAS100", dir: "Long", entry: 18710, sl: 18670, tp: 18810, rrPlanned: 2, rrReal: -1,  result: -100, setupRespected: false, comment: "Prise impulsive.", proof: null },
-  { id: "t6", date: "2025-08-06", asset: "NAS100", dir: "Long", entry: 18740, sl: 18710, tp: 18800, rrPlanned: 2, rrReal: 1.2, result: 120, setupRespected: true, comment: "Bon timing.", proof: null },
-  { id: "t7", date: "2025-08-07", asset: "DE40",  dir: "Short", entry: 18260, sl: 18290, tp: 18200, rrPlanned: 2, rrReal: 1,   result: 100, setupRespected: true, comment: "Cassure propre.", proof: null },
-  { id: "t8", date: "2025-08-08", asset: "NAS100", dir: "Short", entry: 18820, sl: 18860, tp: 18740, rrPlanned: 2, rrReal: -1,  result: -100, setupRespected: false, comment: "Contre-tendance.", proof: null },
-  { id: "t9", date: "2025-08-09", asset: "NAS100", dir: "Long", entry: 18700, sl: 18660, tp: 18780, rrPlanned: 2, rrReal: 2,   result: 200, setupRespected: true, comment: "Plan respecté.", proof: null },
-  { id: "t10", date: "2025-08-10", asset: "DE40",  dir: "Long", entry: 18300, sl: 18270, tp: 18360, rrPlanned: 2, rrReal: 1.5, result: 150, setupRespected: true, comment: "Bonne lecture.", proof: null },
 ];
 
-/* ========= composants UI ========= */
+function usePersistentState(key, initialValue) {
+  const [state, setState] = useState(() => LS.read(key, initialValue));
+  useEffect(() => LS.write(key, state), [key, state]);
+  return [state, setState];
+}
+
+/** ============ tags & cartes & header ============ */
 const Tag = ({ label, bg = "#e2e8f0", color = "#0f172a" }) => (
   <span style={{ background: bg, color, padding: "4px 8px", borderRadius: 999, fontSize: 12 }}>{label}</span>
 );
 
 const Card = ({ title, children }) => (
-  <div style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)", borderRadius: 16, padding: 16, boxShadow: "0 6px 16px rgba(2,132,199,0.08), inset 0 1px 0 rgba(255,255,255,0.7)" }}>
+  <div style={{ background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", borderRadius: 16, padding: 16, boxShadow: "0 6px 16px rgba(2,132,199,0.08), inset 0 1px 0 rgba(255,255,255,0.7)" }}>
     {title && <div style={{ fontWeight: 600, marginBottom: 8, color: "#075985" }}>{title}</div>}
     {children}
   </div>
@@ -93,11 +101,11 @@ const StatusPill = ({ status }) => {
 };
 
 const Header = ({ active, setActive, canInstall, onInstall }) => {
-  const tabs = ["Pro", "Perso", "Tâches libres", "Trading", "Vue Gantt"];
+  const tabs = ["Agenda pro", "Agenda perso", "Tâches libres", "Trading", "Vue Gantt"];
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 10, background: "linear-gradient(90deg,#e0f2fe,white,#f0f9ff)", borderBottom: "1px solid #bae6fd" }}>
       <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", maxWidth: 1120, margin: "0 auto" }}>
-        <div style={{ fontWeight: 800, color: "#0369a1" }}>TkiezView — V1</div>
+        <div style={{ fontWeight: 800, color: "#0369a1" }}>TkiezView — V1.1</div>
         <nav style={{ display: "flex", gap: 8, marginLeft: 12, flexWrap: "wrap" }}>
           {tabs.map((t) => (
             <button key={t} onClick={() => setActive(t)} className="chip" style={{ background: active === t ? "#0284c7" : "#e0f2fe", color: active === t ? "white" : "#075985" }}>
@@ -111,30 +119,51 @@ const Header = ({ active, setActive, canInstall, onInstall }) => {
               Installer l’app
             </button>
           )}
-          <button className="chip" style={{ background: "#0ea5e9", color: "white" }}>+ Nouvelle tâche</button>
         </div>
       </div>
     </div>
   );
 };
 
-/* ========= vues ========= */
-function Dashboard({ scope = "Pro" }) {
-  const [assignee, setAssignee] = useState("all"); // all | you | co
-  const [tasks, setTasks] = useState(sampleTasks[scope]);
-  const [selectedDay, setSelectedDay] = useState("mon");
+/** ============ AGENDAS (avec dates réelles + CRUD) ============ */
+function Agenda({ scope = "pro" }) {
+  const them = scope === "pro" ? theme.pro : theme.perso;
+  const lsKey = scope === "pro" ? "tkv_tasks_pro" : "tkv_tasks_perso";
+  const [assignee, setAssignee] = useState("all");
+  const [tasks, setTasks] = usePersistentState(
+    lsKey,
+    scope === "pro" ? seedTasksPro : seedTasksPerso
+  );
+  const [selectedDay, setSelectedDay] = useState(toKey(today));
+  const [newTitle, setNewTitle] = useState("");
+  const week = getWeek(today); // 7 dates réelles
 
+  // group by dayKey
   const filtered = tasks.filter((t) => (assignee === "all" ? true : t.assignee === assignee));
   const byDay = useMemo(() => {
-    const m = Object.fromEntries(days.map((d) => [d.key, []]));
-    filtered.forEach((t) => m[t.day]?.push(t));
+    const m = Object.fromEntries(week.map((d) => [toKey(d), []]));
+    filtered.forEach((t) => {
+      if (!m[t.dayKey]) m[t.dayKey] = [];
+      m[t.dayKey].push(t);
+    });
     return m;
-  }, [filtered]);
+  }, [filtered, week]);
 
-  const toggleStatus = (id) => {
+  const toggleStatus = (id) =>
     setTasks((old) =>
-      old.map((t) => (t.id === id ? { ...t, status: t.status === "done" ? "todo" : t.status === "todo" ? "done" : t.status } : t))
+      old.map((t) =>
+        t.id === id ? { ...t, status: t.status === "done" ? "todo" : t.status === "todo" ? "done" : t.status } : t
+      )
     );
+  const removeTask = (id) => setTasks((old) => old.filter((t) => t.id !== id));
+  const addTask = (dayKey) => {
+    const title = newTitle.trim();
+    if (!title) return;
+    setTasks((old) => [
+      { id: Date.now(), title, status: "todo", dayKey, assignee: "you", priority: 2 },
+      ...old,
+    ]);
+    setNewTitle("");
   };
 
   const Progress = () => {
@@ -143,8 +172,8 @@ function Dashboard({ scope = "Pro" }) {
     const pct = Math.round((done / total) * 100);
     return (
       <div>
-        <div className="barOuter"><div className="barInner" style={{ width: `${pct}%` }} /></div>
-        <div style={{ fontSize: 12, color: "#075985", marginTop: 4 }}>{pct}% complété</div>
+        <div className="barOuter"><div className="barInner" style={{ width: `${pct}%`, background: them.base }} /></div>
+        <div style={{ fontSize: 12, color: them.dark, marginTop: 4 }}>{pct}% complété</div>
       </div>
     );
   };
@@ -152,59 +181,65 @@ function Dashboard({ scope = "Pro" }) {
   return (
     <div className="grid">
       <div className="col2">
-        <Card title={`Calendrier — Vue semaine (${scope})`}>
+        <Card title={`Calendrier — Vue semaine (${scope === "pro" ? "Agenda pro" : "Agenda perso"})`}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 13, color: "#075985" }}>Filtrer :</div>
-            <button className="chip" onClick={() => setAssignee("all")} style={{ background: assignee === "all" ? "#0284c7" : "#e0f2fe", color: assignee === "all" ? "white" : "#075985" }}>Tous</button>
+            <div style={{ fontSize: 13, color: them.dark }}>Filtrer :</div>
+            <button className="chip" onClick={() => setAssignee("all")} style={{ background: assignee === "all" ? them.base : them.light, color: assignee === "all" ? "white" : them.dark }}>Tous</button>
             {collaborators.map((c) => (
-              <button key={c.id} className="chip" onClick={() => setAssignee(c.id)} style={{ background: assignee === c.id ? "#0284c7" : "#e0f2fe", color: assignee === c.id ? "white" : "#075985" }}>{c.name}</button>
+              <button key={c.id} className="chip" onClick={() => setAssignee(c.id)} style={{ background: assignee === c.id ? them.base : them.light, color: assignee === c.id ? "white" : them.dark }}>{c.name}</button>
             ))}
           </div>
+
           <div className="week">
-            {days.map((d) => (
-              <button key={d.key} onClick={() => setSelectedDay(d.key)} className={cn("day", selectedDay === d.key && "dayActive")}>
-                <div className="dayTitle">{d.label}</div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {byDay[d.key].map((t) => (
-                    <div key={t.id} className="row">
-                      <span className="truncate">{t.title}</span>
-                      <StatusPill status={t.status} />
-                    </div>
-                  ))}
-                  {byDay[d.key].length === 0 && <div className="empty">— rien de prévu —</div>}
-                </div>
-              </button>
-            ))}
+            {week.map((d) => {
+              const key = toKey(d);
+              const label = `${dayName(d)} ${dmy(d)}`;
+              return (
+                <button key={key} onClick={() => setSelectedDay(key)} className={cn("day", selectedDay === key && "dayActive")} style={{ borderColor: them.light }}>
+                  <div className="dayTitle" style={{ color: them.dark }}>{label}</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {(byDay[key] || []).map((t) => (
+                      <div key={t.id} className="row">
+                        <span className="truncate">{t.title}</span>
+                        <StatusPill status={t.status} />
+                      </div>
+                    ))}
+                    {(byDay[key] || []).length === 0 && <div className="empty">— rien de prévu —</div>}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </Card>
 
-        <Card title={`Détails du jour — ${days.find((d) => d.key === selectedDay)?.label}`}>
+        <Card title={`Détails — ${(() => { const d = new Date(selectedDay); return `${dayName(d)} ${dmy(d)}`; })()}`}>
+          <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+            <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Ajouter une tâche…" className="input" />
+            <button className="chip" style={{ background: them.base, color: "white" }} onClick={() => addTask(selectedDay)}>Ajouter</button>
+          </div>
           <div style={{ display: "grid", gap: 8 }}>
-            {byDay[selectedDay].map((t) => (
+            {(byDay[selectedDay] || []).map((t) => (
               <div key={t.id} className="item">
-                <button onClick={() => toggleStatus(t.id)} className={cn("check", t.status === "done" && "checkOn")}>{t.status === "done" ? "✓" : ""}</button>
+                <button onClick={() => toggleStatus(t.id)} className={cn("check", t.status === "done" && "checkOn")} style={{ borderColor: them.base, background: t.status === "done" ? "#10b981" : "white" }}>
+                  {t.status === "done" ? "✓" : ""}
+                </button>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{t.title}</div>
                   <div className="muted">Priorité {t.priority} • Assigné à {collaborators.find((c) => c.id === t.assignee)?.name}</div>
                 </div>
                 <StatusPill status={t.status} />
+                <button className="link" onClick={() => removeTask(t.id)}>Supprimer</button>
               </div>
             ))}
-            {byDay[selectedDay].length === 0 && <div className="muted">Ajoute une tâche à ce jour pour la voir ici.</div>}
+            {(byDay[selectedDay] || []).length === 0 && <div className="muted">Ajoute une tâche pour ce jour.</div>}
           </div>
         </Card>
       </div>
 
       <div className="col1">
-        <Card title="Aujourd’hui — Priorités">
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {filtered.filter((t) => t.status !== "done").slice(0, 3).map((t) => <li key={t.id} style={{ fontSize: 14 }}>{t.title}</li>)}
-            {filtered.filter((t) => t.status !== "done").length === 0 && <li>Tu es à jour ✨</li>}
-          </ul>
-        </Card>
         <Card title="Progression"><Progress /></Card>
         <Card title="Discipline (streak)">
-          <div style={{ fontWeight: 800, fontSize: 24, color: "#075985" }}>5 jours</div>
+          <div style={{ fontWeight: 800, fontSize: 24, color: them.dark }}>5 jours</div>
           <div className="muted">Objectif : 3 priorités/jour</div>
         </Card>
       </div>
@@ -212,8 +247,9 @@ function Dashboard({ scope = "Pro" }) {
   );
 }
 
+/** ============ To-Do libre ============ */
 function FreeTasks() {
-  const [items, setItems] = useState(sampleFree);
+  const [items, setItems] = usePersistentState("tkv_free", seedFree);
   const [text, setText] = useState("");
   return (
     <div className="narrow">
@@ -245,38 +281,16 @@ function FreeTasks() {
   );
 }
 
-const Bar = ({ value }) => (
+/** ============ Trading ============ */
+const Bar = ({ value, color = "#0284c7" }) => (
   <div className="barOuter">
-    <div className="barInner" style={{ width: `${Math.round(value * 100)}%` }} />
+    <div className="barInner" style={{ width: `${Math.round(value * 100)}%`, background: color }} />
   </div>
 );
 
-function TradingObjectives() {
-  const Block = ({ title, list }) => (
-    <Card title={title}>
-      <div style={{ display: "grid", gap: 10 }}>
-        {list.map((o) => (
-          <div key={o.id} className="objective">
-            <div style={{ fontWeight: 600 }}>{o.title}</div>
-            <Bar value={o.progress} />
-            <div className="muted">{Math.round(o.progress * 100)}% complété</div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-  return (
-    <div className="grid3">
-      <Block title="Court terme (1j–3 mois)" list={tradingObjectives.court} />
-      <Block title="Moyen terme (3 mois–1 an)" list={tradingObjectives.moyen} />
-      <Block title="Long terme (+1 an)" list={tradingObjectives.long} />
-    </div>
-  );
-}
-
-const EquitySVG = ({ points }) => {
+const EquitySVG = ({ points, color = "#0284c7" }) => {
   const w = 600, h = 160, p = 20;
-  const max = Math.max(...points), min = Math.min(...points);
+  const max = Math.max(...points, 0), min = Math.min(...points, 0);
   const sx = (i) => p + (i * (w - p * 2)) / (points.length - 1 || 1);
   const sy = (v) => p + (h - p * 2) * (1 - (v - min) / (max - min || 1));
   const d = points.length ? points.map((v, i) => `${i === 0 ? "M" : "L"}${sx(i)},${sy(v)}`).join(" ") : `M${p},${h - p}`;
@@ -284,11 +298,11 @@ const EquitySVG = ({ points }) => {
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%" }}>
       <defs>
         <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.05" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.6" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.05" />
         </linearGradient>
       </defs>
-      <path d={d} fill="none" stroke="#0284c7" strokeWidth="2" />
+      <path d={d} fill="none" stroke={color} strokeWidth="2" />
       <path d={`${d} L ${sx(points.length - 1)},${h - p} L ${sx(0)},${h - p} Z`} fill="url(#eq)" />
     </svg>
   );
@@ -298,16 +312,16 @@ function TradingStats({ journal }) {
   const stats = useMemo(() => {
     const wins = journal.filter((t) => t.result > 0);
     const losses = journal.filter((t) => t.result < 0);
-    const profit = journal.reduce((a, b) => a + b.result, 0);
-    const gw = wins.reduce((a, b) => a + b.result, 0);
-    const gl = Math.abs(losses.reduce((a, b) => a + b.result, 0));
+    const profit = journal.reduce((a, b) => a + Number(b.result || 0), 0);
+    const gw = wins.reduce((a, b) => a + Number(b.result || 0), 0);
+    const gl = Math.abs(losses.reduce((a, b) => a + Number(b.result || 0), 0));
     const pf = gl ? gw / gl : gw ? Infinity : 0;
     const wr = journal.length ? Math.round((wins.length / journal.length) * 100) : 0;
-    const respected = journal.filter((t) => t.setupRespected).length;
+    const respected = journal.filter((t) => !!t.setupRespected).length;
     const respectedPct = journal.length ? Math.round((respected / journal.length) * 100) : 0;
     const points = journal.reduce((arr, t) => {
       const last = arr.length ? arr[arr.length - 1] : 0;
-      arr.push(last + t.result);
+      arr.push(last + Number(t.result || 0));
       return arr;
     }, []);
     return { wr, pf, profit, respectedPct, points };
@@ -332,13 +346,34 @@ function TradingStats({ journal }) {
 
 function TradingJournal() {
   const [filterSetup, setFilterSetup] = useState("all"); // all | yes | no
-  const [data, setData] = useState(sampleJournal);
+  const [data, setData] = usePersistentState("tkv_journal", seedJournal);
+
   const filtered = data.filter((t) => (filterSetup === "all" ? true : filterSetup === "yes" ? t.setupRespected : !t.setupRespected));
   const toggleRespect = (id) => setData((o) => o.map((t) => (t.id === id ? { ...t, setupRespected: !t.setupRespected } : t)));
+  const removeRow = (id) => setData((o) => o.filter((t) => t.id !== id));
+
+  // add row form
+  const emptyRow = { date: toKey(new Date()), asset: "NAS100", dir: "Long", entry: "", sl: "", tp: "", rrPlanned: 2, rrReal: "", result: "", setupRespected: true, comment: "", proof: null };
+  const [form, setForm] = useState(emptyRow);
+
+  const onPickImage = (file, id) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setData((o) => o.map((t) => (t.id === id ? { ...t, proof: reader.result } : t)));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addRow = () => {
+    const id = "t" + Date.now();
+    setData((o) => [{ id, ...form }, ...o]);
+    setForm(emptyRow);
+  };
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <div className="muted">Filtrer “setup respecté” :</div>
         <button className="chip" onClick={() => setFilterSetup("all")} style={{ background: filterSetup === "all" ? "#0284c7" : "#e0f2fe", color: filterSetup === "all" ? "white" : "#075985" }}>Tous</button>
         <button className="chip" onClick={() => setFilterSetup("yes")} style={{ background: filterSetup === "yes" ? "#0284c7" : "#e0f2fe", color: filterSetup === "yes" ? "white" : "#075985" }}>Oui</button>
@@ -349,13 +384,35 @@ function TradingJournal() {
         <TradingStats journal={filtered} />
       </Card>
 
-      <Card title="Journal de trading (exemples pré-remplis)">
+      <Card title="Ajouter un trade">
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <input className="input" style={{ width: 140 }} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} placeholder="YYYY-MM-DD" />
+          <input className="input" style={{ width: 120 }} value={form.asset} onChange={(e) => setForm({ ...form, asset: e.target.value })} placeholder="Actif" />
+          <select className="input" style={{ width: 100 }} value={form.dir} onChange={(e) => setForm({ ...form, dir: e.target.value })}>
+            <option>Long</option><option>Short</option>
+          </select>
+          <input className="input" style={{ width: 100 }} value={form.entry} onChange={(e) => setForm({ ...form, entry: e.target.value })} placeholder="Entrée" />
+          <input className="input" style={{ width: 80 }}  value={form.sl} onChange={(e) => setForm({ ...form, sl: e.target.value })} placeholder="SL" />
+          <input className="input" style={{ width: 80 }}  value={form.tp} onChange={(e) => setForm({ ...form, tp: e.target.value })} placeholder="TP" />
+          <input className="input" style={{ width: 90 }}  value={form.rrPlanned} onChange={(e) => setForm({ ...form, rrPlanned: e.target.value })} placeholder="R:R plan" />
+          <input className="input" style={{ width: 90 }}  value={form.rrReal} onChange={(e) => setForm({ ...form, rrReal: e.target.value })} placeholder="R:R réal" />
+          <input className="input" style={{ width: 110 }} value={form.result} onChange={(e) => setForm({ ...form, result: e.target.value })} placeholder="Résultat $" />
+          <select className="input" style={{ width: 140 }} value={form.setupRespected ? "yes" : "no"} onChange={(e) => setForm({ ...form, setupRespected: e.target.value === "yes" })}>
+            <option value="yes">Setup respecté: Oui</option>
+            <option value="no">Setup respecté: Non</option>
+          </select>
+          <input className="input" style={{ width: 220 }} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="Commentaire" />
+          <button className="chip" style={{ background: "#0ea5e9", color: "white" }} onClick={addRow}>Ajouter</button>
+        </div>
+      </Card>
+
+      <Card title="Journal de trading">
         <div style={{ overflowX: "auto" }}>
           <table className="table">
             <thead>
               <tr>
                 <th>Date</th><th>Actif</th><th>Sens</th><th>Entrée</th><th>SL</th><th>TP</th>
-                <th>R:R (plan/réal)</th><th>Résultat</th><th>Setup respecté</th><th>Commentaire</th><th>Preuve (image)</th>
+                <th>R:R (plan/réal)</th><th>Résultat</th><th>Setup</th><th>Commentaire</th><th>Preuve</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -368,10 +425,27 @@ function TradingJournal() {
                   <td>{t.sl}</td>
                   <td>{t.tp}</td>
                   <td>{t.rrPlanned} / {t.rrReal}</td>
-                  <td style={{ color: t.result >= 0 ? "#047857" : "#b91c1c" }}>{fmt(t.result, "USD")}</td>
-                  <td><button className="chip" onClick={() => toggleRespect(t.id)} style={{ background: t.setupRespected ? "#d1fae5" : "#fee2e2", color: t.setupRespected ? "#065f46" : "#991b1b" }}>{t.setupRespected ? "Oui" : "Non"}</button></td>
+                  <td style={{ color: Number(t.result) >= 0 ? "#047857" : "#b91c1c" }}>{fmt(Number(t.result || 0), "USD")}</td>
+                  <td>
+                    <button className="chip" onClick={() => toggleRespect(t.id)} style={{ background: t.setupRespected ? "#d1fae5" : "#fee2e2", color: t.setupRespected ? "#065f46" : "#991b1b" }}>
+                      {t.setupRespected ? "Oui" : "Non"}
+                    </button>
+                  </td>
                   <td title={t.comment} className="truncate">{t.comment}</td>
-                  <td><div className="proof">Image</div></td>
+                  <td>
+                    {t.proof ? (
+                      <img src={t.proof} alt="preuve" style={{ width: 80, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid #93c5fd" }} />
+                    ) : (
+                      <div className="proof">Image</div>
+                    )}
+                    <div style={{ marginTop: 4 }}>
+                      <label className="chip" style={{ background: "#e0f2fe", color: "#075985", cursor: "pointer" }}>
+                        Importer
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => onPickImage(e.target.files?.[0], t.id)} />
+                      </label>
+                    </div>
+                  </td>
+                  <td><button className="link" onClick={() => removeRow(t.id)}>Supprimer</button></td>
                 </tr>
               ))}
             </tbody>
@@ -382,8 +456,49 @@ function TradingJournal() {
   );
 }
 
+function TradingObjectives() {
+  const data = {
+    court: [
+      { id: "o1", title: "Challenge Prop Firm X validé", progress: 0.8 },
+      { id: "o2", title: "Respect du plan 10 jours", progress: 1 },
+      { id: "o3", title: "+3% sur 1 semaine", progress: 0.6 },
+    ],
+    moyen: [
+      { id: "o4", title: "3 challenges validés", progress: 0.33 },
+      { id: "o5", title: "Capital propre 5 000 €", progress: 0.5 },
+      { id: "o6", title: "3 mois consécutifs verts", progress: 0.33 },
+    ],
+    long: [
+      { id: "o7", title: "Capital propre 50 000 €", progress: 0.1 },
+      { id: "o8", title: "Payout total 100 000 $", progress: 0.05 },
+      { id: "o9", title: "Vivre 100% du trading", progress: 0.02 },
+    ],
+  };
+  const Block = ({ title, list }) => (
+    <Card title={title}>
+      <div style={{ display: "grid", gap: 10 }}>
+        {list.map((o) => (
+          <div key={o.id} className="objective">
+            <div style={{ fontWeight: 600 }}>{o.title}</div>
+            <Bar value={o.progress} />
+            <div className="muted">{Math.round(o.progress * 100)}% complété</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+  return (
+    <div className="grid3">
+      <Block title="Court terme (1j–3 mois)" list={data.court} />
+      <Block title="Moyen terme (3 mois–1 an)" list={data.moyen} />
+      <Block title="Long terme (+1 an)" list={data.long} />
+    </div>
+  );
+}
+
 function TradingPage() {
   const [tab, setTab] = useState("Objectifs"); // Objectifs | Journal | Statistiques
+  const data = LS.read("tkv_journal", seedJournal);
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -395,13 +510,14 @@ function TradingPage() {
       {tab === "Journal" && <TradingJournal />}
       {tab === "Statistiques" && (
         <Card title="Statistiques consolidées">
-          <TradingStats journal={sampleJournal} />
+          <TradingStats journal={data} />
         </Card>
       )}
     </div>
   );
 }
 
+/** ============ Gantt (identique) ============ */
 function GanttView() {
   const projects = [
     { id: "p1", name: "Site vitrine client Alpha", start: 0, end: 3, color: "#0ea5e9" },
@@ -426,6 +542,7 @@ function GanttView() {
   );
 }
 
+/** ============ Diagnostics & Page ============ */
 function Diagnostics() {
   const [sw, setSw] = useState("checking");
   const [canInstall, setCanInstall] = useState(false);
@@ -450,7 +567,7 @@ function Diagnostics() {
   const promptInstall = async () => {
     if (!deferred) return;
     deferred.prompt();
-    await deferred.userChoice; // result not used
+    await deferred.userChoice;
     setCanInstall(false);
   };
 
@@ -461,7 +578,6 @@ function Diagnostics() {
         <div className="muted">Install prompt : <b>{canInstall ? "disponible" : "—"}</b></div>
         <div className="muted" style={{ marginTop: 8 }}>Manifest & SW doivent répondre : <code>/manifest.webmanifest</code> et <code>/sw.js</code>.</div>
       </Card>
-      {/* bouton Install global si dispo */}
       {canInstall && (
         <div style={{ marginTop: 8 }}>
           <button className="chip" onClick={promptInstall} style={{ background: "#10b981", color: "white" }}>Installer l’app</button>
@@ -471,9 +587,8 @@ function Diagnostics() {
   );
 }
 
-/* ========= page ========= */
 export default function Home() {
-  const [tab, setTab] = useState("Pro"); // Pro | Perso | Tâches libres | Trading | Vue Gantt
+  const [tab, setTab] = useState("Agenda pro");
   const [canInstall, setCanInstall] = useState(false);
   const [deferred, setDeferred] = useState(null);
   useEffect(() => {
@@ -490,8 +605,8 @@ export default function Home() {
       <Header active={tab} setActive={setTab} canInstall={canInstall} onInstall={doInstall} />
 
       <main className="wrap" style={{ display: "grid", gap: 16, padding: "16px 16px 40px" }}>
-        {tab === "Pro" && <Dashboard scope="Pro" />}
-        {tab === "Perso" && <Dashboard scope="Perso" />}
+        {tab === "Agenda pro" && <Agenda scope="pro" />}
+        {tab === "Agenda perso" && <Agenda scope="perso" />}
         {tab === "Tâches libres" && <FreeTasks />}
         {tab === "Trading" && <TradingPage />}
         {tab === "Vue Gantt" && <GanttView />}
@@ -499,7 +614,7 @@ export default function Home() {
       </main>
 
       <footer className="wrap" style={{ padding: "24px 16px 48px", fontSize: 12, color: "#075985" }}>
-        Prototype V1 — Données factices. PWA activée (manifest + service worker).
+        Prototype V1.1 — Données persistées en local (localStorage). Pour multi-appareils, on branchera un backend.
       </footer>
 
       <style jsx global>{`
@@ -528,7 +643,7 @@ export default function Home() {
         .barOuter { height: 8px; background: #e0f2fe; border-radius: 999px; overflow: hidden; }
         .barInner { height: 8px; background: #0284c7; }
         .table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        .table th, .table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+        .table th, .table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
         .rowGood { background: #ecfdf5; }
         .rowBad { background: #fff1f2; }
         .proof { width: 80px; height: 40px; border: 2px dashed #93c5fd; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #0369a1; }
